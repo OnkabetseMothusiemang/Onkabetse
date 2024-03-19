@@ -1,0 +1,156 @@
+{% extends 'project_content/base.html' %}
+{% block content %}
+<div class="pageholder">
+    <div class="titleholder"> 
+        <div class="title"> Google Maps to track your order </div> 
+    </div>
+
+    <div id="map" style="height: 400px; width: 100%;"></div>
+
+    <form id="locationForm">
+        <label for="origin">Enter Your Location:</label>
+        <input type="text" id="origin" name="origin"><br><br>
+        
+        <input type="submit" value="Submit">
+    </form>
+
+    <div id="etaDisplay">
+        <p>Estimated Time of Arrival: <span id="eta"></span></p>
+      
+    </div>
+
+    <script>
+        var map;
+        var directionsService;
+        var directionsRenderer;
+        var deliveryMarker;
+        var etaDisplay = document.getElementById('eta'); 
+    
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 12,
+                center: { lat: -25.4808, lng: 28.1036 } 
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+            deliveryMarker = new google.maps.Marker({
+                map: map,
+                icon: {
+                    url: 'https://example.com/vehicle_icon.png',
+                    scaledSize: new google.maps.Size(50, 50), 
+                    origin: new google.maps.Point(0, 0), 
+                    anchor: new google.maps.Point(25, 25) 
+                },
+                title: 'Delivery Vehicle'
+            });
+        }
+    
+        function calculateRoute(origin) {
+            var destination = { lat: -25.5502, lng: 28.0897 }; 
+            var request = {
+                origin: origin,
+                destination: destination,
+                travelMode: 'DRIVING'
+            };
+            directionsService.route(request, function(result, status) {
+                if (status == 'OK') {
+                    directionsRenderer.setDirections(result);
+                    animateDeliveryMarker(result, result.routes[0].legs[0].start_location); // Start animation from start location
+    
+                    var route = result.routes[0];
+                    var legs = route.legs;
+                    var duration = 0;
+                    for (var i = 0; i < legs.length; i++) {
+                        duration += legs[i].duration.value;
+                    }
+                    var minutes = Math.round(duration / 60);
+                    document.getElementById('eta').innerText = minutes + ' minutes';
+                } else {
+                    window.alert('Directions request failed due to ' + status);
+                }
+            });
+        }
+    
+        function animateDeliveryMarker(route, startLocation) {
+            var path = route.routes[0].overview_path;
+            var index = 0;
+            var numSteps = path.length;
+            var totalDistance = 0;
+            var speed = 50; // Adjust speed as necessary
+
+            // Calculate total distance of the path
+            for (var i = 1; i < numSteps; i++) {
+                totalDistance += google.maps.geometry.spherical.computeDistanceBetween(path[i - 1], path[i]);
+            }
+
+            // Calculate interval for animation based on speed
+            var animationInterval = calculateInterval(totalDistance, speed); 
+
+            // Function to calculate interval time
+            function calculateInterval(distance, speed) {
+                var time = (distance / 1000) / speed;
+                return time * 3600 * 1000; // Convert to milliseconds
+            }
+
+            // Function to update the marker's position
+            function updateDeliveryMarker(position) {
+                deliveryMarker.setPosition(position);
+            }
+
+            // Function to move the marker along the path
+            function moveMarker() {
+                if (index < numSteps) {
+                    var newPosition = path[index];
+                    updateDeliveryMarker(newPosition); // Update delivery marker position
+                    index++;
+                    if (index < numSteps) {
+                        var distance = google.maps.geometry.spherical.computeDistanceBetween(path[index - 1], path[index]);
+                        var interval = calculateInterval(distance, speed);
+                        setTimeout(moveMarker, interval);
+                    }
+                }
+            }
+
+            // Start the animation from the startLocation
+            deliveryMarker.setPosition(startLocation);
+            moveMarker();
+        }
+    
+        function handleSubmit(event) {
+            event.preventDefault();
+            var origin = document.getElementById('origin').value;
+            calculateRoute(origin);
+        }
+
+        async function trackDelivery() {
+            try {
+                const response = await fetch('/api/delivery-route');
+                const data = await response.json();
+
+                if (!data.routeCoordinates || !Array.isArray(data.routeCoordinates)) {
+                    throw new Error('Invalid route data');
+                }
+
+                const routeCoordinates = data.routeCoordinates;
+                const updateFrequency = 1000; // milliseconds
+
+                for (let index = 0; index < routeCoordinates.length; index++) {
+                    const coordinate = routeCoordinates[index];
+                    await new Promise(resolve => setTimeout(resolve, index * updateFrequency));
+                    updateDeliveryMarker(coordinate);
+                }
+            } catch (error) {
+                console.error('Error fetching or tracking delivery:', error);
+            }
+        }
+
+        window.initMap = initMap;
+    
+        document.getElementById('locationForm').addEventListener('submit', handleSubmit);
+        trackDelivery(); // Start tracking delivery when the page loads
+    </script>
+    
+    
+<script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCZJCJVzkTMgNFmi6SXU3IVcRiUt6luZIk&callback=initMap"></script>
+{% endblock %}

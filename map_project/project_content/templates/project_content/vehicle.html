@@ -1,0 +1,17 @@
+<!-- order_detail.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Detail</title>
+</head>
+<body>
+    <h1>Order Detail</h1>
+    <p>Status: {{ order.status }}</p>
+    <h2>Location History</h2>
+    <ul>
+    {% for location in locations %}
+        <li>{{ location.latitude }}, {{ location.longitude }} - {{ location.timestamp }}</li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
